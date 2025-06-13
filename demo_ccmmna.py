@@ -305,19 +305,35 @@ def get_json_template(document_type):
 # --- Streamlit UI (main_streamlit_app ya no contiene st.set_page_config ni la sección de credenciales) ---
 def main_streamlit_app():
     
-    # --- AÑADE TU IMAGEN AQUÍ ---
-    # 1. Reemplaza "nombre_de_tu_imagen.png" con el nombre real de tu archivo de imagen.
-    #    Si la imagen está en una subcarpeta, usa la ruta completa, ej. "assets/images/logo.png"
-    image_path = "LOGOTIPO_IAC.png" # <--- Reemplaza con el nombre de tu archivo de imagen
-    
-    # 2. Opcional: Define el ancho de la imagen. Por defecto, Streamlit intentará ajustarla.
-    #    Puedes usar un valor en píxeles (ej. 200) o un porcentaje de la columna (ej. 0.7)
-    image_width = 300 # Experimenta con este valor para ver qué tan grande quieres que sea.
+    # --- Configuración para colocar la imagen en la esquina superior derecha ---
+    # 1. Definir la ruta de la imagen
+    image_path = "image_5299d7.png" # <--- Reemplaza con el nombre de tu archivo de imagen
 
-    try:
-        st.image(image_path, width=image_width)
-    except FileNotFoundError:
-        st.error(f"Error: La imagen '{image_path}' no se encontró. Asegúrate de que la ruta sea correcta y el archivo exista.")
+    # 2. Definir el ancho de la imagen (ajusta según tus necesidades)
+    image_width = 200 # Un ancho más pequeño puede ser adecuado para una esquina
+
+    # 3. Crear dos columnas: una vacía a la izquierda y otra para la imagen a la derecha
+    # Los números en la lista (ej. [0.7, 0.3]) representan las proporciones de ancho de las columnas.
+    # Aquí, la primera columna ocupa el 70% del ancho, y la segunda el 30%.
+    col1, col2 = st.columns([0.7, 0.3]) # Ajusta las proporciones si es necesario
+
+    with col1:
+        # Puedes poner el título y la descripción aquí, o dejarla vacía para que la imagen esté más a la derecha
+        st.title("📊 Extractor de Registros de Asistencia con IA")
+        st.markdown(
+            """
+            Esta aplicación utiliza **Azure AI Document Intelligence** para extraer texto y tablas
+            de documentos (PDF, imágenes) y **Azure OpenAI** para estructurar esa información
+            en un formato JSON, limpiando y normalizando campos como correos electrónicos y nombres de empresas.
+            """
+        )
+
+    with col2:
+        # La imagen se colocará en la segunda columna (la derecha)
+        try:
+            st.image(image_path, width=image_width)
+        except FileNotFoundError:
+            st.error(f"Error: La imagen '{image_path}' no se encontró. Asegúrate de que la ruta sea correcta y el archivo exista.")
     
     #st.title("📊 Extractor de Registros de Asistencia con IA")
     '''
