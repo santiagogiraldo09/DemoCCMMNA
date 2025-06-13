@@ -304,6 +304,21 @@ def get_json_template(document_type):
 
 # --- Streamlit UI (main_streamlit_app ya no contiene st.set_page_config ni la sección de credenciales) ---
 def main_streamlit_app():
+    
+    # --- AÑADE TU IMAGEN AQUÍ ---
+    # 1. Reemplaza "nombre_de_tu_imagen.png" con el nombre real de tu archivo de imagen.
+    #    Si la imagen está en una subcarpeta, usa la ruta completa, ej. "assets/images/logo.png"
+    image_path = "LOGOTIPO_IAC.png" # <--- Reemplaza con el nombre de tu archivo de imagen
+    
+    # 2. Opcional: Define el ancho de la imagen. Por defecto, Streamlit intentará ajustarla.
+    #    Puedes usar un valor en píxeles (ej. 200) o un porcentaje de la columna (ej. 0.7)
+    image_width = 300 # Experimenta con este valor para ver qué tan grande quieres que sea.
+
+    try:
+        st.image(image_path, width=image_width)
+    except FileNotFoundError:
+        st.error(f"Error: La imagen '{image_path}' no se encontró. Asegúrate de que la ruta sea correcta y el archivo exista.")
+    
     #st.title("📊 Extractor de Registros de Asistencia con IA")
     '''
     st.markdown(
