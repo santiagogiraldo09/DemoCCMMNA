@@ -304,7 +304,8 @@ def get_json_template(document_type):
 
 # --- Streamlit UI (main_streamlit_app ya no contiene st.set_page_config ni la sección de credenciales) ---
 def main_streamlit_app():
-    st.title("📊 Extractor de Registros de Asistencia con IA")
+    #st.title("📊 Extractor de Registros de Asistencia con IA")
+    '''
     st.markdown(
         """
         Esta aplicación utiliza **Azure AI Document Intelligence** para extraer texto y tablas
@@ -312,6 +313,7 @@ def main_streamlit_app():
         en un formato JSON, limpiando y normalizando campos como correos electrónicos y nombres de empresas.
         """
     )
+    '''
     # --- SECCIÓN DE CREDENCIALES ELIMINADA PARA EL USUARIO FINAL ---
     # st.header("1. Configuración de Credenciales")
     # st.info(...)
@@ -319,7 +321,7 @@ def main_streamlit_app():
 
     st.header("1. Sube tus Archivos") # Reajustado el número del encabezado
     uploaded_files = st.file_uploader(
-        "Sube uno o varios archivos de registro de asistencia (PDF, JPG, PNG, TIFF)",
+        "Sube tu archivo de registro de asistencia (PDF)",
         type=["pdf", "jpg", "jpeg", "png", "tiff"],
         accept_multiple_files=True
     )
@@ -416,8 +418,8 @@ def main_streamlit_app():
                 final_ordered_columns = [col for col in ordered_columns if col in df_final.columns]
                 df_final = df_final[final_ordered_columns]
 
-                st.success("¡Procesamiento completado! Aquí están los datos consolidados:")
-                st.dataframe(df_final)
+                st.success("¡Procesamiento completado!")
+                #st.dataframe(df_final)
 
                 # Opción de descarga de Excel
                 excel_buffer = BytesIO()
