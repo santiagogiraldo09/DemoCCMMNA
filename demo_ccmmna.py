@@ -1,11 +1,9 @@
 import streamlit as st
 import json
-import os
 import re
 from io import BytesIO
 import pandas as pd
 import xlsxwriter # Necesario para la exportación a .xlsx por Pandas
-from PIL import Image
 
 # Importar las bibliotecas de Azure AI Document Intelligence
 from azure.ai.documentintelligence import DocumentIntelligenceClient
@@ -305,12 +303,6 @@ def get_json_template(document_type):
 
 # --- Streamlit UI (main_streamlit_app ya no contiene st.set_page_config ni la sección de credenciales) ---
 def main_streamlit_app():
-    
-    st.set_page_config(layout="centered")
-    col1, col2 = st.columns([2, 1.5])
-    image_path = os.path.join(os.path.dirname(__file__), 'LOGOTIPO_IAC.png')  # Usar ruta relativa
-    image = Image.open(image_path)
-    col2.image(image, width=300)
     
     #st.title("📊 Extractor de Registros de Asistencia con IA")
     '''
