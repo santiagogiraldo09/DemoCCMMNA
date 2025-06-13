@@ -20,6 +20,8 @@ st.set_page_config(page_title="Extractor de Registros de Asistencia", layout="wi
 
 
 # --- Configuración de Credenciales (¡USANDO STREAMLIT SECRETS!) ---
+# Estas líneas leen los secretos desde .streamlit/secrets.toml
+# Si las claves no se encuentran, los @st.cache_resource con try/except lo manejarán
 AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = st.secrets["AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT"]
 AZURE_DOCUMENT_INTELLIGENCE_KEY = st.secrets["AZURE_DOCUMENT_INTELLIGENCE_KEY"]
 AZURE_OPENAI_ENDPOINT = st.secrets["AZURE_OPENAI_ENDPOINT"]
@@ -300,9 +302,8 @@ def get_json_template(document_type):
         st.warning(f"No se encontró una plantilla para el tipo de documento: {document_type}")
         return None
 
-# --- Streamlit UI (main_streamlit_app ya no contiene st.set_page_config) ---
+# --- Streamlit UI (main_streamlit_app ya no contiene st.set_page_config ni la sección de credenciales) ---
 def main_streamlit_app():
-    # st.set_page_config() se ha movido al inicio del script
     st.title("📊 Extractor de Registros de Asistencia con IA")
     st.markdown(
         """
@@ -311,26 +312,12 @@ def main_streamlit_app():
         en un formato JSON, limpiando y normalizando campos como correos electrónicos y nombres de empresas.
         """
     )
+    # --- SECCIÓN DE CREDENCIALES ELIMINADA PARA EL USUARIO FINAL ---
+    # st.header("1. Configuración de Credenciales")
+    # st.info(...)
+    # st.code(...)
 
-    st.header("1. Configuración de Credenciales")
-    st.info(
-        "Para usar esta aplicación, debes configurar tus credenciales de Azure AI Document Intelligence "
-        "y Azure OpenAI en un archivo `.streamlit/secrets.toml`. "
-        "Este método es el más seguro y recomendado para la gestión de credenciales."
-    )
-    st.code(
-        """
-        # Contenido del archivo .streamlit/secrets.toml
-        AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = "https://tu-resource-docintel.cognitiveservices.azure.com/"
-        AZURE_DOCUMENT_INTELLIGENCE_KEY = "tu_clave_de_document_intelligence"
-        AZURE_OPENAI_ENDPOINT = "https://tu-resource-openai.openai.azure.com/"
-        AZURE_OPENAI_KEY = "tu_clave_de_openai"
-        AZURE_OPENAI_DEPLOYMENT_NAME = "tu_nombre_de_deployment_openai"
-        """,
-        language="toml"
-    )
-
-    st.header("2. Sube tus Archivos")
+    st.header("1. Sube tus Archivos") # Reajustado el número del encabezado
     uploaded_files = st.file_uploader(
         "Sube uno o varios archivos de registro de asistencia (PDF, JPG, PNG, TIFF)",
         type=["pdf", "jpg", "jpeg", "png", "tiff"],
@@ -414,7 +401,7 @@ def main_streamlit_app():
                 
                 progress_bar.progress((i + 1) / total_files)
             
-            st.header("3. Resultados Consolidados")
+            st.header("2. Resultados Consolidados") # Reajustado el número del encabezado
             if all_consolidated_data:
                 df_final = pd.DataFrame(all_consolidated_data)
                 
