@@ -142,7 +142,7 @@ def clean_and_infer_email(email_str, company_name=""):
 
 
 # --- Función para extraer texto y estructura con Azure AI Document Intelligence ---
-@st.spinner("Paso 1: Extrayendo texto...")
+@st.spinner("Extrayendo texto...")
 def extract_data_with_document_intelligence(file_stream, file_name):
     try:
         poller = document_intelligence_client.begin_analyze_document(
@@ -207,7 +207,7 @@ def extract_data_with_document_intelligence(file_stream, file_name):
         return None
 
 # --- Función para convertir el texto en JSON usando Azure OpenAI ---
-@st.spinner("Paso 2: Estructurando información...")
+@st.spinner("Estructurando información...")
 def parse_as_json(extracted_content, json_template):
     text_to_parse = extracted_content.get('text_content', '')
     tables_to_parse = extracted_content.get('tables', [])
@@ -319,7 +319,7 @@ def main_streamlit_app():
     # st.info(...)
     # st.code(...)
 
-    st.header("1. Sube tus Archivos") # Reajustado el número del encabezado
+    st.header("Sube tus Archivos") # Reajustado el número del encabezado
     uploaded_files = st.file_uploader(
         "Sube tu archivo de registro de asistencia (PDF)",
         type=["pdf", "jpg", "jpeg", "png", "tiff"],
@@ -403,7 +403,7 @@ def main_streamlit_app():
                 
                 progress_bar.progress((i + 1) / total_files)
             
-            st.header("2. Resultados Consolidados") # Reajustado el número del encabezado
+            #st.header("2. Resultados Consolidados") # Reajustado el número del encabezado
             if all_consolidated_data:
                 df_final = pd.DataFrame(all_consolidated_data)
                 
