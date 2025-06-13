@@ -142,7 +142,7 @@ def clean_and_infer_email(email_str, company_name=""):
 
 
 # --- Función para extraer texto y estructura con Azure AI Document Intelligence ---
-@st.spinner("Paso 1: Extrayendo texto y estructura con Azure AI Document Intelligence...")
+@st.spinner("Paso 1: Extrayendo texto...")
 def extract_data_with_document_intelligence(file_stream, file_name):
     try:
         poller = document_intelligence_client.begin_analyze_document(
@@ -207,7 +207,7 @@ def extract_data_with_document_intelligence(file_stream, file_name):
         return None
 
 # --- Función para convertir el texto en JSON usando Azure OpenAI ---
-@st.spinner("Paso 2: Enviando datos a Azure OpenAI para estructuración...")
+@st.spinner("Paso 2: Estructurando información...")
 def parse_as_json(extracted_content, json_template):
     text_to_parse = extracted_content.get('text_content', '')
     tables_to_parse = extracted_content.get('tables', [])
@@ -389,7 +389,7 @@ def main_streamlit_app():
                                             }
                                             all_consolidated_data.append(combined_row)
                                         
-                                        st.success(f"Datos de asistentes de '{file_name}' procesados y agregados.")
+                                        #st.success(f"Datos de asistentes de '{file_name}' procesados y agregados.")
                                     else:
                                         st.info(f"No se extrajeron asistentes para un evento en '{file_name}'.")
                             else:
