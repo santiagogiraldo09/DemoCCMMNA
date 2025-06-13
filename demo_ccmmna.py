@@ -1,6 +1,6 @@
 import streamlit as st
 import json
-import os # Aunque no lo usaremos para secrets, a veces se mantiene para otras funciones
+import os
 import re
 from io import BytesIO
 import pandas as pd
@@ -15,24 +15,21 @@ from azure.core.exceptions import HttpResponseError
 # Importar Azure OpenAI
 from openai import AzureOpenAI
 
+# --- ¡CORRECCIÓN! Mover st.set_page_config() al inicio del script ---
 st.set_page_config(page_title="Extractor de Registros de Asistencia", layout="wide")
 
+
 # --- Configuración de Credenciales (¡USANDO STREAMLIT SECRETS!) ---
-# Los valores se leen directamente de st.secrets.
-# Si el archivo .streamlit/secrets.toml no existe o las claves no están,
-# st.secrets lanzará un KeyError. Esto es manejado por los bloques try/except
-# y los st.error/st.stop en las funciones get_client.
 AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = st.secrets["AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT"]
 AZURE_DOCUMENT_INTELLIGENCE_KEY = st.secrets["AZURE_DOCUMENT_INTELLIGENCE_KEY"]
 AZURE_OPENAI_ENDPOINT = st.secrets["AZURE_OPENAI_ENDPOINT"]
 AZURE_OPENAI_KEY = st.secrets["AZURE_OPENAI_KEY"]
 AZURE_OPENAI_DEPLOYMENT_NAME = st.secrets["AZURE_OPENAI_DEPLOYMENT_NAME"]
 
+
 # --- Inicializar clientes (se inicializan dentro de la función main para manejar errores de credenciales) ---
 @st.cache_resource
 def get_document_intelligence_client():
-    # Ya no es necesario verificar os.environ.get, st.secrets manejará la falta de la clave
-    # y los bloques try/except en las funciones de inicialización.
     try:
         return DocumentIntelligenceClient(
             endpoint=AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
@@ -51,7 +48,7 @@ def get_openai_client():
         return AzureOpenAI(
             azure_endpoint=AZURE_OPENAI_ENDPOINT,
             api_key=AZURE_OPENAI_KEY,
-            api_version="2024-12-01-preview" # Manteniendo tu api_version original
+            api_version="2024-12-01-preview"
         )
     except KeyError as e:
         st.error(f"Error de configuración: La clave de secreto '{e}' no se encontró para Azure OpenAI. Asegúrate de que tu archivo .streamlit/secrets.toml esté configurado correctamente.")
@@ -61,7 +58,6 @@ def get_openai_client():
         st.stop()
 
 # Inicializa los clientes al inicio de la aplicación, aprovechando st.cache_resource
-# y la verificación de secretos.
 document_intelligence_client = get_document_intelligence_client()
 openai_client = get_openai_client()
 
@@ -304,9 +300,9 @@ def get_json_template(document_type):
         st.warning(f"No se encontró una plantilla para el tipo de documento: {document_type}")
         return None
 
-# --- Streamlit UI ---
+# --- Streamlit UI (main_streamlit_app ya no contiene st.set_page_config) ---
 def main_streamlit_app():
-    st.set_page_config(page_title="Extractor de Registros de Asistencia", layout="wide")
+    # st.set_page_config() se ha movido al inicio del script
     st.title("📊 Extractor de Registros de Asistencia con IA")
     st.markdown(
         """
