@@ -1,0 +1,4 @@
+[theme]
+base="dark"
+primaryColor="#f8b126"
+secondaryBackgroundColor="#f8b126"
