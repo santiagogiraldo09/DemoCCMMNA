@@ -15,6 +15,8 @@ from azure.core.exceptions import HttpResponseError
 # Importar Azure OpenAI
 from openai import AzureOpenAI
 
+st.set_page_config(page_title="Extractor de Registros de Asistencia", layout="wide")
+
 # --- Configuración de Credenciales (¡USANDO STREAMLIT SECRETS!) ---
 # Los valores se leen directamente de st.secrets.
 # Si el archivo .streamlit/secrets.toml no existe o las claves no están,

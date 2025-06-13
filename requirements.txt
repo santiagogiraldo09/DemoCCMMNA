@@ -1,0 +1,6 @@
+streamlit
+pandas
+openpyxl
+xlsxwriter
+azure-ai-documentintelligence
+openai
