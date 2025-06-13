@@ -381,8 +381,8 @@ def main_streamlit_app():
                                             company_name_for_email_infer = attendee.get("NOMBRE EMPRESA/ENTIDAD", "")
                                             
                                             # Llamada a tu función original sin las adiciones de dominio
-                                            cleaned_email = clean_and_infer_email(original_email, company_name_for_email_infer)
-                                            attendee["CORREO ELECTRÓNICO"] = cleaned_email
+                                            #cleaned_email = clean_and_infer_email(original_email, company_name_for_email_infer)
+                                            #attendee["CORREO ELECTRÓNICO"] = cleaned_email
                                             
                                             combined_row = {
                                                 **event_data, 
