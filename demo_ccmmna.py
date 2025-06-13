@@ -74,6 +74,7 @@ def clean_json_text(json_text):
         cleaned_text = cleaned_text[:-len("```")].strip()
     return cleaned_text
 
+'''
 # --- FUNCIÓN clean_and_infer_email (TU VERSIÓN ORIGINAL) ---
 def clean_and_infer_email(email_str, company_name=""):
     """
@@ -139,7 +140,7 @@ def clean_and_infer_email(email_str, company_name=""):
         return ""
     
     return final_email
-
+'''
 
 # --- Función para extraer texto y estructura con Azure AI Document Intelligence ---
 @st.spinner("Extrayendo texto...")
