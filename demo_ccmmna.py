@@ -307,7 +307,7 @@ def main_streamlit_app():
     
     # --- Configuración para colocar la imagen en la esquina superior derecha ---
     # 1. Definir la ruta de la imagen
-    image_path = "image_5299d7.png" # <--- Reemplaza con el nombre de tu archivo de imagen
+    image_path = "LOGOTIPO_IAC.png" # <--- Reemplaza con el nombre de tu archivo de imagen
 
     # 2. Definir el ancho de la imagen (ajusta según tus necesidades)
     image_width = 200 # Un ancho más pequeño puede ser adecuado para una esquina
