@@ -1,9 +1,10 @@
-import asyncio
+import streamlit as st
 import json
-import os
+import os # Aunque no lo usaremos para secrets, a veces se mantiene para otras funciones
 import re
 from io import BytesIO
-import pandas as pd # Para exportar a Excel
+import pandas as pd
+import xlsxwriter # Necesario para la exportación a .xlsx por Pandas
 
 # Importar las bibliotecas de Azure AI Document Intelligence
 from azure.ai.documentintelligence import DocumentIntelligenceClient
@@ -14,19 +15,53 @@ from azure.core.exceptions import HttpResponseError
 # Importar Azure OpenAI
 from openai import AzureOpenAI
 
+# --- Configuración de Credenciales (¡USANDO STREAMLIT SECRETS!) ---
+# Los valores se leen directamente de st.secrets.
+# Si el archivo .streamlit/secrets.toml no existe o las claves no están,
+# st.secrets lanzará un KeyError. Esto es manejado por los bloques try/except
+# y los st.error/st.stop en las funciones get_client.
+AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = st.secrets["AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT"]
+AZURE_DOCUMENT_INTELLIGENCE_KEY = st.secrets["AZURE_DOCUMENT_INTELLIGENCE_KEY"]
+AZURE_OPENAI_ENDPOINT = st.secrets["AZURE_OPENAI_ENDPOINT"]
+AZURE_OPENAI_KEY = st.secrets["AZURE_OPENAI_KEY"]
+AZURE_OPENAI_DEPLOYMENT_NAME = st.secrets["AZURE_OPENAI_DEPLOYMENT_NAME"]
 
+# --- Inicializar clientes (se inicializan dentro de la función main para manejar errores de credenciales) ---
+@st.cache_resource
+def get_document_intelligence_client():
+    # Ya no es necesario verificar os.environ.get, st.secrets manejará la falta de la clave
+    # y los bloques try/except en las funciones de inicialización.
+    try:
+        return DocumentIntelligenceClient(
+            endpoint=AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
+            credential=AzureKeyCredential(AZURE_DOCUMENT_INTELLIGENCE_KEY)
+        )
+    except KeyError as e:
+        st.error(f"Error de configuración: La clave de secreto '{e}' no se encontró para Azure Document Intelligence. Asegúrate de que tu archivo .streamlit/secrets.toml esté configurado correctamente.")
+        st.stop()
+    except Exception as e:
+        st.error(f"Error al inicializar el cliente de Document Intelligence: {e}")
+        st.stop()
 
-# --- Inicializar clientes ---
-document_intelligence_client = DocumentIntelligenceClient(
-    endpoint=AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
-    credential=AzureKeyCredential(AZURE_DOCUMENT_INTELLIGENCE_KEY)
-)
+@st.cache_resource
+def get_openai_client():
+    try:
+        return AzureOpenAI(
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+            api_key=AZURE_OPENAI_KEY,
+            api_version="2024-12-01-preview" # Manteniendo tu api_version original
+        )
+    except KeyError as e:
+        st.error(f"Error de configuración: La clave de secreto '{e}' no se encontró para Azure OpenAI. Asegúrate de que tu archivo .streamlit/secrets.toml esté configurado correctamente.")
+        st.stop()
+    except Exception as e:
+        st.error(f"Error al inicializar el cliente de OpenAI: {e}")
+        st.stop()
 
-openai_client = AzureOpenAI(
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-    api_key=AZURE_OPENAI_KEY,
-    api_version="2024-12-01-preview"
-)
+# Inicializa los clientes al inicio de la aplicación, aprovechando st.cache_resource
+# y la verificación de secretos.
+document_intelligence_client = get_document_intelligence_client()
+openai_client = get_openai_client()
 
 
 # --- Funciones de Utilidad ---
@@ -39,15 +74,76 @@ def clean_json_text(json_text):
         cleaned_text = cleaned_text[:-len("```")].strip()
     return cleaned_text
 
-# --- Función para extraer texto y estructura con Azure AI Document Intelligence (SÍNCRONA) ---
+# --- FUNCIÓN clean_and_infer_email (TU VERSIÓN ORIGINAL) ---
+def clean_and_infer_email(email_str, company_name=""):
+    """
+    Limpia y normaliza una cadena de correo electrónico, e intenta inferir el dominio
+    basándose en el nombre de la empresa. Esta es la versión del código original del usuario.
+    """
+    if not isinstance(email_str, str):
+        return ""
+
+    original_email = email_str.lower().strip()
+    cleaned_email = original_email
+
+    # 1. Limpieza inicial: eliminar caracteres no alfanuméricos comunes (excepto @ . - _)
+    cleaned_email = re.sub(r'[^\w.@\-\_]+', '', cleaned_email)
+    
+    # 2. Eliminar "www." si aparece al principio o en medio de un dominio
+    cleaned_email = cleaned_email.replace('www.', '')
+
+    # 3. Corregir espacios o saltos de línea dentro del correo (ej. "user @domain")
+    cleaned_email = cleaned_email.replace(' ', '').replace('\n', '')
+
+    # Separar usuario y dominio
+    username = ""
+    domain = ""
+    if '@' in cleaned_email:
+        parts = cleaned_email.split('@')
+        if len(parts) == 2:
+            username, domain = parts
+            domain = domain.strip()
+        else: # Múltiples @ o malformado, intentar usar la primera ocurrencia de @
+            at_index = cleaned_email.find('@')
+            if at_index != -1:
+                username = cleaned_email[:at_index]
+                domain = cleaned_email[at_index+1:].strip()
+    else: # No hay @
+        username = cleaned_email
+        domain = ""
+    
+    # Si no se corrigió por mapeo directo, intentar inferir o completar
+    if domain == "" or '.' not in domain or domain.endswith('.'):
+        if domain.endswith('.'):
+            domain = domain.rstrip('.')
+
+        if company_name:
+            company_lower_clean = re.sub(r'[^a-z0-9]', '', company_name.lower())
+            
+            if not domain and company_lower_clean:
+                domain = f"{company_lower_clean}.com.co" 
+        
+        if not domain or len(domain.split('.')[-1]) < 2:
+            if domain and '.' not in domain:
+                domain += ".com.co"
+            elif not domain and username:
+                domain = "example.com"
+    
+    if username and domain:
+        final_email = f"{username}@{domain}"
+    else:
+        final_email = ""
+
+    email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_regex, final_email):
+        return ""
+    
+    return final_email
+
+
+# --- Función para extraer texto y estructura con Azure AI Document Intelligence ---
+@st.spinner("Paso 1: Extrayendo texto y estructura con Azure AI Document Intelligence...")
 def extract_data_with_document_intelligence(file_stream, file_name):
-    """
-    Extrae texto y estructura (incluyendo tablas y texto manuscrito)
-    de un archivo usando el modelo preconstruido 'layout' de Azure AI Document Intelligence.
-    Esta función ahora es SÍNCRONA, bloqueando hasta que Document Intelligence termine.
-    """
-    print(f"--- Procesando archivo: {file_name} ---")
-    print("Paso 1: Extrayendo texto y estructura con Azure AI Document Intelligence...")
     try:
         poller = document_intelligence_client.begin_analyze_document(
             "prebuilt-layout",
@@ -63,84 +159,56 @@ def extract_data_with_document_intelligence(file_stream, file_name):
             if result.paragraphs:
                 for paragraph in result.paragraphs:
                     extracted_text += paragraph.content + "\n"
-            print("\nTexto plano extraído:")
-            print(extracted_text)
 
             if result.tables:
                 for table_idx, table in enumerate(result.tables):
-                    print(f"\nTabla {table_idx + 1} detectada:")
                     table_content = []
-                    
                     headers = {}
-                    # Primero, mapeamos los encabezados de columna explícitos
                     for cell in table.cells:
                         if cell.kind == "columnHeader":
                             headers[cell.column_index] = cell.content.strip()
-                        # Si la celda es un campo de selección y tiene un contenido que podría ser un nombre, lo mapeamos también
-                        # Esto es útil si los nombres de tipo (Esales, comercio) no son headers explícitos, sino parte de la celda de selección
                         elif hasattr(cell, 'selection_state') and cell.selection_state is not None and cell.content.strip():
                              headers[cell.column_index] = cell.content.strip()
 
-
                     current_row = {}
                     last_row_index = -1
-                    
                     sorted_cells = sorted(table.cells, key=lambda c: (c.row_index, c.column_index))
                     
                     for cell in sorted_cells:
-                        # Ignorar columna "FIRMA"
-                        if "firma" in cell.content.lower() or cell.column_index == 7: # Asumiendo que 7 es la columna de firma
+                        if "firma" in cell.content.lower() or cell.column_index == 7:
                             continue
 
-                        # Si la celda es de una nueva fila, agregamos la fila anterior y reseteamos
                         if cell.row_index != last_row_index:
                             if current_row:
                                 table_content.append(current_row)
                             current_row = {}
                             last_row_index = cell.row_index
                         
-                        # --- MODIFICACIÓN CLAVE AQUÍ: Verificar si selection_state existe antes de accederlo ---
                         if hasattr(cell, 'selection_state') and cell.selection_state is not None:
-                            # Si es una celda de selección (checkbox/radio button)
-                            # Buscamos el nombre de la columna desde los headers mapeados o el contenido de la celda
                             col_name = headers.get(cell.column_index) or cell.content.strip() or f"Tipo_{cell.column_index}"
-                            current_row[col_name] = cell.selection_state.value # Guarda 'selected' o 'unselected'
+                            current_row[col_name] = cell.selection_state.value
                         else:
-                            # Manejo de celdas normales
                             col_name = headers.get(cell.column_index, f"Col_{cell.column_index}")
-                            current_row[col_name] = cell.content.strip() # Limpiar contenido para el LLM
+                            current_row[col_name] = cell.content.strip()
 
-                    # Asegurarse de agregar la última fila procesada si hay alguna
                     if current_row:
                         table_content.append(current_row)
-                    
-                    print(f"Contenido de la tabla {table_idx + 1}:")
-                    print(json.dumps(table_content, indent=2, ensure_ascii=False))
                     extracted_tables_data.append(table_content)
-            else:
-                print("\nNo se detectaron tablas estructuradas.")
-
             return {
                 'text_content': extracted_text.strip(),
                 'tables': extracted_tables_data
             }
         return None
     except HttpResponseError as e:
-        print(f"ERROR de Azure Document Intelligence: {e.reason} - {e.message}")
+        st.error(f"ERROR de Azure Document Intelligence: {e.reason} - {e.message}")
         return None
     except Exception as e:
-        # Aquí capturamos cualquier otro error inesperado y lo imprimimos
-        print(f"ERROR inesperado durante la extracción de documentos: {e}")
+        st.error(f"ERROR inesperado durante la extracción de documentos: {e}")
         return None
 
 # --- Función para convertir el texto en JSON usando Azure OpenAI ---
+@st.spinner("Paso 2: Enviando datos a Azure OpenAI para estructuración...")
 def parse_as_json(extracted_content, json_template):
-    """
-    Convierte el texto y la estructura de tablas extraídos por Document Intelligence
-    en un JSON usando el modelo de Azure OpenAI.
-    Ahora espera un array de objetos de registro de asistencia.
-    """
-    print("\nPaso 2: Enviando datos a Azure OpenAI para estructuración...")
     text_to_parse = extracted_content.get('text_content', '')
     tables_to_parse = extracted_content.get('tables', [])
 
@@ -150,13 +218,9 @@ def parse_as_json(extracted_content, json_template):
         for table_idx, table_data in enumerate(tables_to_parse):
             prompt_tables_info += f"--- Tabla {table_idx + 1} ---\n"
             for row in table_data:
-                # Asegura que las filas de la tabla se representen claramente para el LLM
-                # Aquí se incluyen TODAS las columnas, incluyendo las de tipo (Esales, comercio)
-                # con sus valores 'selected'/'unselected', para que el LLM las vea.
                 row_items = []
                 for k, v in row.items():
-                    if "firma" not in k.lower(): # Excluir la columna de firma
-                        # MODIFICACIÓN: Eliminada la condición `v.strip() != ''`
+                    if "firma" not in k.lower():
                         row_items.append(f"'{k}': '{v}'") 
                 prompt_tables_info += "{" + ", ".join(row_items) + "}\n"
             prompt_tables_info += "---------------------\n"
@@ -167,7 +231,7 @@ def parse_as_json(extracted_content, json_template):
             f"Convierte el siguiente contenido del documento en una lista de objetos JSON que **debe coincidir exactamente** con la estructura proporcionada en la plantilla. "
             f"Cada elemento de la lista debe ser un objeto que represente una sección de evento única, incluyendo su información general y su lista de 'asistentes' correspondiente. "
             f"Presta especial atención a asociar los asistentes con los detalles correctos de su evento. "
-            f"**Incluye todas las columnas tal como se te presentan en la tabla de datos, incluyendo las que indican el tipo de asistente (ej., 'Esales', 'comercio', 'Tenderos') con sus valores 'selected' o 'unselected'.**" # <--- INSTRUCCIÓN CLAVE AQUÍ
+            f"**Incluye todas las columnas tal como se te presentan en la tabla de datos, incluyendo las que indican el tipo de asistente (ej., 'Esales', 'comercio', 'Tenderos') con sus valores 'selected' o 'unselected'.**"
             f"**Asegúrate de ignorar cualquier dato en la columna 'firma' o campos de firma similares.**\n\n"
             f"Aquí está el contenido del texto del documento:\n{text_to_parse}\n"
             f"{prompt_tables_info}\n\n"
@@ -191,36 +255,28 @@ def parse_as_json(extracted_content, json_template):
             parsed_json_text = response.choices[0].message.content.strip()
             cleaned_json_text = clean_json_text(parsed_json_text)
             
-            print("\nJSON generado por Azure OpenAI:")
-            print(cleaned_json_text)
-
             try:
-                # Se espera una lista de objetos, no un solo objeto
                 parsed_data = json.loads(cleaned_json_text)
                 if isinstance(parsed_data, list):
                     return parsed_data
                 else:
-                    print("ERROR: El JSON generado por OpenAI no es un array como se esperaba.")
+                    st.warning("El JSON generado por OpenAI no es un array como se esperaba. Revisando el formato...")
+                    if isinstance(parsed_data, dict):
+                        return [parsed_data]
                     return None
             except json.JSONDecodeError as e:
-                print(f"ERROR al decodificar el JSON generado por OpenAI: {e}")
-                print(f"JSON problemático: {cleaned_json_text}")
+                st.error(f"ERROR al decodificar el JSON generado por OpenAI: {e}. JSON problemático: {cleaned_json_text[:500]}...")
                 return None
         else:
-            print("ERROR: No se obtuvo una respuesta válida del modelo OpenAI.")
+            st.error("No se obtuvo una respuesta válida del modelo OpenAI.")
             return None
     except Exception as e:
-        print(f"ERROR al comunicarse con Azure OpenAI: {e}")
+        st.error(f"ERROR al comunicarse con Azure OpenAI: {e}")
         return None
 
 # --- Función para obtener la plantilla JSON (para tu formulario) ---
 def get_json_template(document_type):
-    """Carga la plantilla JSON para el tipo de documento de registro de asistencia.
-    Ahora devuelve un array de objetos de registro de asistencia.
-    NOTA: Las columnas de tipo (Esales, comercio, etc.) no están predefinidas aquí.
-    Se espera que OpenAI las incluya dinámicamente si las detecta."""
     if document_type == "Registro de Asistencia":
-        # La plantilla ahora es un array que contiene un ejemplo de objeto de registro
         template = [
             {
                 "NOMBRE DEL PROGRAMA": "string",
@@ -237,32 +293,59 @@ def get_json_template(document_type):
                         "MUNICIPIO/ CORREGIMIENTO/ VEREDA": "string",
                         "NÚMERO CONTACTO": "string",
                         "CORREO ELECTRÓNICO": "string"
-                        # NO se añade "Tipo": "string" aquí para que el LLM las incluya dinámicamente
-                        # o para que salgan como columnas separadas si el LLM las detecta así.
                     }
                 ]
             }
         ]
         return template
     else:
-        print(f"ADVERTENCIA: No se encontró una plantilla para el tipo de documento: {document_type}")
+        st.warning(f"No se encontró una plantilla para el tipo de documento: {document_type}")
         return None
 
-# --- Función principal para procesar archivos locales (SÍNCRONA) ---
-def main():
-    print("Iniciando el proceso de extracción de registros de asistencia...")
-    
-    # Lista para recolectar todos los datos consolidados de todos los archivos
-    all_consolidated_data = [] 
+# --- Streamlit UI ---
+def main_streamlit_app():
+    st.set_page_config(page_title="Extractor de Registros de Asistencia", layout="wide")
+    st.title("📊 Extractor de Registros de Asistencia con IA")
+    st.markdown(
+        """
+        Esta aplicación utiliza **Azure AI Document Intelligence** para extraer texto y tablas
+        de documentos (PDF, imágenes) y **Azure OpenAI** para estructurar esa información
+        en un formato JSON, limpiando y normalizando campos como correos electrónicos y nombres de empresas.
+        """
+    )
 
-    # --- Definir campos generales y de asistente (fuera del bucle para reutilización) ---
+    st.header("1. Configuración de Credenciales")
+    st.info(
+        "Para usar esta aplicación, debes configurar tus credenciales de Azure AI Document Intelligence "
+        "y Azure OpenAI en un archivo `.streamlit/secrets.toml`. "
+        "Este método es el más seguro y recomendado para la gestión de credenciales."
+    )
+    st.code(
+        """
+        # Contenido del archivo .streamlit/secrets.toml
+        AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = "https://tu-resource-docintel.cognitiveservices.azure.com/"
+        AZURE_DOCUMENT_INTELLIGENCE_KEY = "tu_clave_de_document_intelligence"
+        AZURE_OPENAI_ENDPOINT = "https://tu-resource-openai.openai.azure.com/"
+        AZURE_OPENAI_KEY = "tu_clave_de_openai"
+        AZURE_OPENAI_DEPLOYMENT_NAME = "tu_nombre_de_deployment_openai"
+        """,
+        language="toml"
+    )
+
+    st.header("2. Sube tus Archivos")
+    uploaded_files = st.file_uploader(
+        "Sube uno o varios archivos de registro de asistencia (PDF, JPG, PNG, TIFF)",
+        type=["pdf", "jpg", "jpeg", "png", "tiff"],
+        accept_multiple_files=True
+    )
+
+    all_consolidated_data = []
+    
+    # Campos de información general y de asistente (igual que en tu script original)
     general_info_fields = [
         "NOMBRE DEL PROGRAMA", "TIPO DE ACTIVIDAD", "LUGAR",
         "MUNICIPIO", "ORIENTADO POR", "FECHA"
     ]
-    
-    # attendee_specific_fields NO incluye "Tipo" en esta etapa, ya que se espera
-    # que OpenAI devuelva las columnas individuales de tipo.
     attendee_specific_fields_base = [
         "NOMBRE COMPLETO",
         "NÚMERO DOCUMENTO",
@@ -272,102 +355,101 @@ def main():
         "CORREO ELECTRÓNICO"
     ]
 
-    if not os.path.exists(INPUT_FILES_PATH):
-        print(f"ERROR: La ruta de entrada '{INPUT_FILES_PATH}' no existe. Por favor, crea la carpeta y coloca tus archivos.")
-        return
-
-    files_to_process = [f for f in os.listdir(INPUT_FILES_PATH) if f.lower().endswith(('.pdf', '.png', '.jpg', '.jpeg', '.tiff'))]
-    
-    if not files_to_process:
-        print(f"ADVERTENCIA: No se encontraron archivos PDF o imagen en la carpeta '{INPUT_FILES_PATH}'.")
-        return
-
-    print(f"\nSe encontraron {len(files_to_process)} archivos para procesar en '{INPUT_FILES_PATH}'.")
-
-    for file_name in files_to_process:
-        file_path = os.path.join(INPUT_FILES_PATH, file_name)
-        
-        try:
-            with open(file_path, "rb") as file_handle:
-                file_stream = BytesIO(file_handle.read())
+    if uploaded_files:
+        if st.button("Procesar Archivos"):
+            progress_bar = st.progress(0)
+            total_files = len(uploaded_files)
             
-            # Llamada síncrona a la función de Document Intelligence
-            extracted_content = extract_data_with_document_intelligence(file_stream, file_name)
-
-            if extracted_content:
-                json_template = get_json_template("Registro de Asistencia")
+            for i, uploaded_file in enumerate(uploaded_files):
+                file_name = uploaded_file.name
+                st.subheader(f"Procesando: {file_name}")
                 
-                if json_template:
-                    # parse_as_json ahora devuelve una LISTA de registros de asistencia
-                    parsed_events_data = parse_as_json(extracted_content, json_template)
-                    
-                    # Asegurarse de que parsed_events_data sea una lista antes de iterar
-                    if parsed_events_data and isinstance(parsed_events_data, list):
-                        # Iterar sobre cada evento detectado en el JSON
-                        for registro_evento in parsed_events_data:
-                            # Extraer la información general del evento de ESTE registro de evento
-                            event_data = {field: registro_evento.get(field, '') for field in general_info_fields}
-                            event_data["Fuente_Archivo"] = file_name # Añadir la fuente del archivo como una columna más
+                # Leer el archivo en un stream de bytes
+                file_stream = BytesIO(uploaded_file.read())
+                
+                try:
+                    # Paso 1: Extraer datos con Document Intelligence
+                    extracted_content = extract_data_with_document_intelligence(file_stream, file_name)
+
+                    if extracted_content:
+                        json_template = get_json_template("Registro de Asistencia")
+                        
+                        if json_template:
+                            # Paso 2: Parsear a JSON con OpenAI
+                            parsed_events_data = parse_as_json(extracted_content, json_template)
                             
-                            # Procesar cada asistente asociado a ESTE evento
-                            if registro_evento.get("asistentes"):
-                                for attendee in registro_evento["asistentes"]:
-                                    # Crear un diccionario para cada asistente, combinando info del evento
-                                    # y TODA la info del asistente (incluyendo las columnas de tipo si el LLM las devuelve)
-                                    combined_row = {
-                                        **event_data, 
-                                        **{k: v for k, v in attendee.items()} # Se añaden todos los campos del asistente tal cual vienen
-                                    }
-                                    all_consolidated_data.append(combined_row)
-                                
-                                print(f"\n--- Datos de asistentes de un evento en '{file_name}' agregados a la lista consolidada ---")
+                            if parsed_events_data and isinstance(parsed_events_data, list):
+                                for registro_evento in parsed_events_data:
+                                    event_data = {field: registro_evento.get(field, '') for field in general_info_fields}
+                                    event_data["Fuente_Archivo"] = file_name
+                                    
+                                    if registro_evento.get("asistentes"):
+                                        if not registro_evento["asistentes"]:
+                                            st.warning(f"La lista de asistentes para un evento en '{file_name}' está vacía. Saltando.")
+                                            continue
+                                            
+                                        for attendee in registro_evento["asistentes"]:
+                                            original_email = attendee.get("CORREO ELECTRÓNICO", "")
+                                            company_name_for_email_infer = attendee.get("NOMBRE EMPRESA/ENTIDAD", "")
+                                            
+                                            # Llamada a tu función original sin las adiciones de dominio
+                                            cleaned_email = clean_and_infer_email(original_email, company_name_for_email_infer)
+                                            attendee["CORREO ELECTRÓNICO"] = cleaned_email
+                                            
+                                            combined_row = {
+                                                **event_data, 
+                                                **{k: v for k, v in attendee.items()}
+                                            }
+                                            all_consolidated_data.append(combined_row)
+                                        
+                                        st.success(f"Datos de asistentes de '{file_name}' procesados y agregados.")
+                                    else:
+                                        st.info(f"No se extrajeron asistentes para un evento en '{file_name}'.")
                             else:
-                                print(f"No se extrajeron asistentes para un evento en '{file_name}'.")
+                                st.warning(f"El JSON generado para '{file_name}' no contiene un array de registros o está vacío.")
+                        else:
+                            st.warning(f"No se pudo cargar la plantilla JSON para '{file_name}'.")
                     else:
-                        print(f"ADVERTENCIA: El JSON generado para '{file_name}' no contiene un array de registros o está vacío.")
-                else:
-                    print(f"ADVERTENCIA: No se pudo cargar la plantilla JSON para '{file_name}'.")
+                        st.warning(f"No se pudo extraer contenido de '{file_name}'.")
+                except Exception as e:
+                    st.error(f"Ocurrió un error al procesar {file_name}: {e}")
+                
+                progress_bar.progress((i + 1) / total_files)
+            
+            st.header("3. Resultados Consolidados")
+            if all_consolidated_data:
+                df_final = pd.DataFrame(all_consolidated_data)
+                
+                # Ordenar columnas
+                ordered_columns = general_info_fields + ["Fuente_Archivo"] 
+                ordered_columns.extend(attendee_specific_fields_base) 
+                
+                for col in df_final.columns:
+                    if col not in ordered_columns and col not in ["Tipo"]:
+                        ordered_columns.append(col)
+                
+                final_ordered_columns = [col for col in ordered_columns if col in df_final.columns]
+                df_final = df_final[final_ordered_columns]
+
+                st.success("¡Procesamiento completado! Aquí están los datos consolidados:")
+                st.dataframe(df_final)
+
+                # Opción de descarga de Excel
+                excel_buffer = BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                    df_final.to_excel(writer, index=False, sheet_name='Registros')
+                excel_buffer.seek(0)
+                
+                st.download_button(
+                    label="Descargar datos en Excel",
+                    data=excel_buffer,
+                    file_name="registros_asistencia_consolidados.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
             else:
-                print(f"ADVERTENCIA: No se pudo extraer contenido de '{file_name}'.")
-        except FileNotFoundError:
-            print(f"ERROR: Archivo no encontrado: {file_path}")
-        except Exception as e:
-            print(f"ERROR general al procesar '{file_name}': {e}")
-        print("-" * 50)
-
-    # Paso 3: Consolidar y exportar todos los datos a un único archivo Excel
-    if all_consolidated_data:
-        # Se crea el DataFrame sin un orden de columnas predefinido para capturar TODAS las columnas
-        # que el LLM haya detectado, incluidas las de tipo (Esales, comercio, etc.).
-        df_final = pd.DataFrame(all_consolidated_data)
-        
-        # Intentar definir un orden general. Las columnas de tipo se añadirán al final.
-        # Primero, las columnas generales del evento + Fuente_Archivo
-        ordered_columns = general_info_fields + ["Fuente_Archivo"] 
-        
-        # Luego, las columnas base de asistente (nombre, documento, etc.)
-        ordered_columns.extend(attendee_specific_fields_base) 
-        
-        # Finalmente, identificar las columnas de tipo dinámicamente
-        # Recorremos todas las columnas que el DataFrame ha detectado y añadimos las que no están en ordered_columns
-        for col in df_final.columns:
-            if col not in ordered_columns and col not in ["Tipo"]: # Excluir "Tipo" si apareció por error
-                ordered_columns.append(col) # Esto capturará "Esales", "comercio", etc.
-        
-        # Asegurarse de que las columnas existentes en df_final coincidan con ordered_columns
-        # Esto previene errores si alguna columna de ordered_columns no existe en df_final
-        final_ordered_columns = [col for col in ordered_columns if col in df_final.columns]
-        df_final = df_final[final_ordered_columns]
-
-        try:
-            # Pandas con xlsxwriter engine pondrá los encabezados en negrita por defecto
-            df_final.to_excel(OUTPUT_EXCEL_FILENAME, index=False, engine='xlsxwriter')
-            print(f"\nPROCESO FINALIZADO: Todos los datos consolidados han sido exportados exitosamente a '{OUTPUT_EXCEL_FILENAME}'.")
-        except Exception as e:
-            print(f"ERROR al exportar a Excel: {e}")
+                st.info("No se extrajeron datos de asistentes de ningún archivo subido.")
     else:
-        print("\nPROCESO FINALIZADO: No se extrajeron datos de asistentes de ningún archivo.")
+        st.info("Sube uno o más archivos para comenzar el procesamiento.")
 
-# Ejecutar la función principal síncrona
 if __name__ == "__main__":
-    main()
+    main_streamlit_app()
