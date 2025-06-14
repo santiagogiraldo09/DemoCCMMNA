@@ -219,7 +219,7 @@ def parse_as_json(extracted_content, json_template):
             for row in table_data:
                 row_items = []
                 for k, v in row.items():
-                    if "firma" not in k.lower():
+                    if "firma" not in k.lower() and v != ":unselected:":
                         row_items.append(f"'{k}': '{v}'") 
                 prompt_tables_info += "{" + ", ".join(row_items) + "}\n"
             prompt_tables_info += "---------------------\n"
