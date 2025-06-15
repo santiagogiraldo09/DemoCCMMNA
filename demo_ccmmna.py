@@ -66,6 +66,7 @@ def clean_json_text(json_text):
         cleaned_text = cleaned_text[:-len("```")].strip()
     return cleaned_text
 
+'''
 def clean_and_infer_email(email_str, company_name=""):
     """
     Limpia y normaliza una cadena de correo electrónico, e intenta inferir el dominio
@@ -125,6 +126,7 @@ def clean_and_infer_email(email_str, company_name=""):
         return ""
     
     return final_email
+'''
 
 # --- Función para extraer texto y estructura ---
 @st.spinner("Extrayendo texto...")
@@ -379,8 +381,8 @@ def main_streamlit_app():
                                             company_name_for_email_infer = attendee.get("NOMBRE EMPRESA/ENTIDAD", "")
                                             
                                             # Limpiar email
-                                            cleaned_email = clean_and_infer_email(original_email, company_name_for_email_infer)
-                                            attendee["CORREO ELECTRÓNICO"] = cleaned_email
+                                            cleaned_email = attendee["CORREO ELECTRÓNICO"]
+                                            #attendee["CORREO ELECTRÓNICO"] = cleaned_email
                                             
                                             # ====== NUEVO: DETERMINAR TIPO ASISTENTE ======
                                             tipo_asistente = ""
