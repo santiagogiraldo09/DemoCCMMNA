@@ -66,66 +66,6 @@ def clean_json_text(json_text):
         cleaned_text = cleaned_text[:-len("```")].strip()
     return cleaned_text
 
-def clean_and_infer_email(email_str, company_name=""):
-    """
-    Limpia y normaliza una cadena de correo electrónico, e intenta inferir el dominio
-    basándose en el nombre de la empresa.
-    """
-    if not isinstance(email_str, str):
-        return ""
-
-    original_email = email_str.lower().strip()
-    cleaned_email = original_email
-
-    # 1. Limpieza inicial
-    cleaned_email = re.sub(r'[^\w.@\-\_]+', '', cleaned_email)
-    cleaned_email = cleaned_email.replace('www.', '')
-    cleaned_email = cleaned_email.replace(' ', '').replace('\n', '')
-
-    # Separar usuario y dominio
-    username = ""
-    domain = ""
-    if '@' in cleaned_email:
-        parts = cleaned_email.split('@')
-        if len(parts) == 2:
-            username, domain = parts
-            domain = domain.strip()
-        else:
-            at_index = cleaned_email.find('@')
-            if at_index != -1:
-                username = cleaned_email[:at_index]
-                domain = cleaned_email[at_index+1:].strip()
-    else:
-        username = cleaned_email
-        domain = ""
-    
-    # Intentar inferir dominio si es necesario
-    if domain == "" or '.' not in domain or domain.endswith('.'):
-        if domain.endswith('.'):
-            domain = domain.rstrip('.')
-
-        if company_name:
-            company_lower_clean = re.sub(r'[^a-z0-9]', '', company_name.lower())
-            if not domain and company_lower_clean:
-                domain = f"{company_lower_clean}.com.co" 
-        
-        if not domain or len(domain.split('.')[-1]) < 2:
-            if domain and '.' not in domain:
-                domain += ".com.co"
-            elif not domain and username:
-                domain = "example.com"
-    
-    if username and domain:
-        final_email = f"{username}@{domain}"
-    else:
-        final_email = ""
-
-    email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if not re.match(email_regex, final_email):
-        return ""
-    
-    return final_email
-
 # --- Función para extraer texto y estructura ---
 @st.spinner("Extrayendo texto...")
 def extract_data_with_document_intelligence(file_stream, file_name):
@@ -375,14 +315,10 @@ def main_streamlit_app():
                                             continue
                                             
                                         for attendee in registro_evento["asistentes"]:
-                                            original_email = attendee.get("CORREO ELECTRÓNICO", "")
-                                            company_name_for_email_infer = attendee.get("NOMBRE EMPRESA/ENTIDAD", "")
+                                            # ====== ELIMINADA LA LIMPIEZA DE CORREOS ======
+                                            # Mantenemos el correo exactamente como viene del OCR
                                             
-                                            # Limpiar email
-                                            cleaned_email = clean_and_infer_email(original_email, company_name_for_email_infer)
-                                            attendee["CORREO ELECTRÓNICO"] = cleaned_email
-                                            
-                                            # ====== NUEVO: DETERMINAR TIPO ASISTENTE ======
+                                            # ====== DETERMINAR TIPO ASISTENTE ======
                                             tipo_asistente = ""
                                             for campo in tipo_asistente_fields:
                                                 if attendee.get(campo, "").strip().lower() == "selected":
@@ -396,7 +332,6 @@ def main_streamlit_app():
                                             
                                             # Agregar nuevo campo consolidado
                                             attendee["TIPO ASISTENTE"] = tipo_asistente
-                                            # ====== FIN DE MODIFICACIÓN ======
                                             
                                             combined_row = {
                                                 **event_data, 
