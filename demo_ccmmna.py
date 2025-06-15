@@ -458,7 +458,7 @@ def main_streamlit_app():
             else:
                 st.info("No se extrajeron datos de asistentes de ningún archivo subido.")
     else:
-        st.info("Sube uno o más archivos para comenzar el procesamiento.")
+        st.info("Sube uno archivo para comenzar el procesamiento.")
 
 if __name__ == "__main__":
     main_streamlit_app()
