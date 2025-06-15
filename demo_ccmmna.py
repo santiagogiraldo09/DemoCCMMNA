@@ -367,7 +367,7 @@ def main_streamlit_app():
                             if parsed_events_data and isinstance(parsed_events_data, list):
                                 for registro_evento in parsed_events_data:
                                     event_data = {field: registro_evento.get(field, '') for field in general_info_fields}
-                                    #event_data["Fuente_Archivo"] = file_name
+                                    event_data["Fuente_Archivo"] = file_name
                                     
                                     if registro_evento.get("asistentes"):
                                         if not registro_evento["asistentes"]:
@@ -395,7 +395,7 @@ def main_streamlit_app():
                                                     del attendee[campo]
                                             
                                             # Agregar nuevo campo consolidado
-                                            attendee["TiIPO ASISTENTE"] = tipo_asistente
+                                            attendee["Tipo asistente"] = tipo_asistente
                                             # ====== FIN DE MODIFICACIÓN ======
                                             
                                             combined_row = {
@@ -420,8 +420,7 @@ def main_streamlit_app():
                 df_final = pd.DataFrame(all_consolidated_data)
                 
                 # Ordenar columnas con la nueva estructura
-                #ordered_columns = general_info_fields + ["Fuente_Archivo"] 
-                ordered_columns = general_info_fields
+                ordered_columns = general_info_fields + ["Fuente_Archivo"] 
                 # Mantener solo campos base sin los de tipo
                 base_fields_without_type = [
                     "NOMBRE COMPLETO",
