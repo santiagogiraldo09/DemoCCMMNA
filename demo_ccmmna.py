@@ -3,7 +3,7 @@ import json
 import re
 from io import BytesIO
 import pandas as pd
-import xlsxwriter # Necesario para la exportación a .xlsx por Pandas
+import xlsxwriter
 
 # Importar las bibliotecas de Azure AI Document Intelligence
 from azure.ai.documentintelligence import DocumentIntelligenceClient
@@ -14,21 +14,16 @@ from azure.core.exceptions import HttpResponseError
 # Importar Azure OpenAI
 from openai import AzureOpenAI
 
-# --- ¡CORRECCIÓN! Mover st.set_page_config() al inicio del script ---
 st.set_page_config(page_title="Extractor de Registros de Asistencia", layout="wide")
 
-
-# --- Configuración de Credenciales (¡USANDO STREAMLIT SECRETS!) ---
-# Estas líneas leen los secretos desde .streamlit/secrets.toml
-# Si las claves no se encuentran, los @st.cache_resource con try/except lo manejarán
+# --- Configuración de Credenciales ---
 AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = st.secrets["AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT"]
 AZURE_DOCUMENT_INTELLIGENCE_KEY = st.secrets["AZURE_DOCUMENT_INTELLIGENCE_KEY"]
 AZURE_OPENAI_ENDPOINT = st.secrets["AZURE_OPENAI_ENDPOINT"]
 AZURE_OPENAI_KEY = st.secrets["AZURE_OPENAI_KEY"]
 AZURE_OPENAI_DEPLOYMENT_NAME = st.secrets["AZURE_OPENAI_DEPLOYMENT_NAME"]
 
-
-# --- Inicializar clientes (se inicializan dentro de la función main para manejar errores de credenciales) ---
+# --- Inicializar clientes ---
 @st.cache_resource
 def get_document_intelligence_client():
     try:
@@ -58,10 +53,8 @@ def get_openai_client():
         st.error(f"Error al inicializar el cliente de OpenAI: {e}")
         st.stop()
 
-# Inicializa los clientes al inicio de la aplicación, aprovechando st.cache_resource
 document_intelligence_client = get_document_intelligence_client()
 openai_client = get_openai_client()
-
 
 # --- Funciones de Utilidad ---
 def clean_json_text(json_text):
@@ -73,11 +66,10 @@ def clean_json_text(json_text):
         cleaned_text = cleaned_text[:-len("```")].strip()
     return cleaned_text
 
-# --- FUNCIÓN clean_and_infer_email (TU VERSIÓN ORIGINAL) ---
 def clean_and_infer_email(email_str, company_name=""):
     """
     Limpia y normaliza una cadena de correo electrónico, e intenta inferir el dominio
-    basándose en el nombre de la empresa. Esta es la versión del código original del usuario.
+    basándose en el nombre de la empresa.
     """
     if not isinstance(email_str, str):
         return ""
@@ -85,13 +77,9 @@ def clean_and_infer_email(email_str, company_name=""):
     original_email = email_str.lower().strip()
     cleaned_email = original_email
 
-    # 1. Limpieza inicial: eliminar caracteres no alfanuméricos comunes (excepto @ . - _)
+    # 1. Limpieza inicial
     cleaned_email = re.sub(r'[^\w.@\-\_]+', '', cleaned_email)
-    
-    # 2. Eliminar "www." si aparece al principio o en medio de un dominio
     cleaned_email = cleaned_email.replace('www.', '')
-
-    # 3. Corregir espacios o saltos de línea dentro del correo (ej. "user @domain")
     cleaned_email = cleaned_email.replace(' ', '').replace('\n', '')
 
     # Separar usuario y dominio
@@ -102,23 +90,22 @@ def clean_and_infer_email(email_str, company_name=""):
         if len(parts) == 2:
             username, domain = parts
             domain = domain.strip()
-        else: # Múltiples @ o malformado, intentar usar la primera ocurrencia de @
+        else:
             at_index = cleaned_email.find('@')
             if at_index != -1:
                 username = cleaned_email[:at_index]
                 domain = cleaned_email[at_index+1:].strip()
-    else: # No hay @
+    else:
         username = cleaned_email
         domain = ""
     
-    # Si no se corrigió por mapeo directo, intentar inferir o completar
+    # Intentar inferir dominio si es necesario
     if domain == "" or '.' not in domain or domain.endswith('.'):
         if domain.endswith('.'):
             domain = domain.rstrip('.')
 
         if company_name:
             company_lower_clean = re.sub(r'[^a-z0-9]', '', company_name.lower())
-            
             if not domain and company_lower_clean:
                 domain = f"{company_lower_clean}.com.co" 
         
@@ -139,8 +126,7 @@ def clean_and_infer_email(email_str, company_name=""):
     
     return final_email
 
-
-# --- Función para extraer texto y estructura con Azure AI Document Intelligence ---
+# --- Función para extraer texto y estructura ---
 @st.spinner("Extrayendo texto...")
 def extract_data_with_document_intelligence(file_stream, file_name):
     try:
@@ -205,7 +191,7 @@ def extract_data_with_document_intelligence(file_stream, file_name):
         st.error(f"ERROR inesperado durante la extracción de documentos: {e}")
         return None
 
-# --- Función para convertir el texto en JSON usando Azure OpenAI ---
+# --- Función para convertir el texto en JSON ---
 @st.spinner("Estructurando información...")
 def parse_as_json(extracted_content, json_template):
     text_to_parse = extracted_content.get('text_content', '')
@@ -273,7 +259,7 @@ def parse_as_json(extracted_content, json_template):
         st.error(f"ERROR al comunicarse con Azure OpenAI: {e}")
         return None
 
-# --- Función para obtener la plantilla JSON (para tu formulario) ---
+# --- Función para obtener la plantilla JSON ---
 def get_json_template(document_type):
     if document_type == "Registro de Asistencia":
         template = [
@@ -309,25 +295,9 @@ def get_json_template(document_type):
         st.warning(f"No se encontró una plantilla para el tipo de documento: {document_type}")
         return None
 
-# --- Streamlit UI (main_streamlit_app ya no contiene st.set_page_config ni la sección de credenciales) ---
+# --- Streamlit UI ---
 def main_streamlit_app():
-    
-    #st.title("📊 Extractor de Registros de Asistencia con IA")
-    '''
-    st.markdown(
-        """
-        Esta aplicación utiliza **Azure AI Document Intelligence** para extraer texto y tablas
-        de documentos (PDF, imágenes) y **Azure OpenAI** para estructurar esa información
-        en un formato JSON, limpiando y normalizando campos como correos electrónicos y nombres de empresas.
-        """
-    )
-    '''
-    # --- SECCIÓN DE CREDENCIALES ELIMINADA PARA EL USUARIO FINAL ---
-    # st.header("1. Configuración de Credenciales")
-    # st.info(...)
-    # st.code(...)
-
-    st.header("Sube tus Archivos") # Reajustado el número del encabezado
+    st.header("Sube tus Archivos")
     uploaded_files = st.file_uploader(
         "Sube tu archivo de registro de asistencia (PDF)",
         type=["pdf", "jpg", "jpeg", "png", "tiff"],
@@ -336,11 +306,13 @@ def main_streamlit_app():
 
     all_consolidated_data = []
     
-    # Campos de información general y de asistente (igual que en tu script original)
+    # Campos de información general
     general_info_fields = [
         "NOMBRE DEL PROGRAMA", "TIPO DE ACTIVIDAD", "LUGAR",
         "MUNICIPIO", "ORIENTADO POR", "FECHA"
     ]
+    
+    # Campos específicos de asistentes
     attendee_specific_fields_base = [
         "NOMBRE COMPLETO",
         "NÚMERO DOCUMENTO",
@@ -357,6 +329,18 @@ def main_streamlit_app():
         "NÚMERO CONTACTO",
         "CORREO ELECTRÓNICO"
     ]
+    
+    # Campos de tipo de asistente para consolidar
+    tipo_asistente_fields = [
+        "EMPRESARIO NO MATRICULADO",
+        "TENDEROS",
+        "PERSONA NATURAL REGISTRADA",
+        "ESALES",
+        "PERSONA JURÍDICA - MANUFACTURA",
+        "PERSONA JURÍDICA - SERVICIOS",
+        "PERSONA JURÍDICA / COMERCIO",
+        "OTRAS PERSONAS JURÍDICAS"
+    ]
 
     if uploaded_files:
         if st.button("Procesar Archivos"):
@@ -367,18 +351,17 @@ def main_streamlit_app():
                 file_name = uploaded_file.name
                 st.subheader(f"Procesando: {file_name}")
                 
-                # Leer el archivo en un stream de bytes
                 file_stream = BytesIO(uploaded_file.read())
                 
                 try:
-                    # Paso 1: Extraer datos con Document Intelligence
+                    # Extraer datos con Document Intelligence
                     extracted_content = extract_data_with_document_intelligence(file_stream, file_name)
 
                     if extracted_content:
                         json_template = get_json_template("Registro de Asistencia")
                         
                         if json_template:
-                            # Paso 2: Parsear a JSON con OpenAI
+                            # Parsear a JSON con OpenAI
                             parsed_events_data = parse_as_json(extracted_content, json_template)
                             
                             if parsed_events_data and isinstance(parsed_events_data, list):
@@ -395,17 +378,31 @@ def main_streamlit_app():
                                             original_email = attendee.get("CORREO ELECTRÓNICO", "")
                                             company_name_for_email_infer = attendee.get("NOMBRE EMPRESA/ENTIDAD", "")
                                             
-                                            # Llamada a tu función original sin las adiciones de dominio
-                                            #cleaned_email = clean_and_infer_email(original_email, company_name_for_email_infer)
-                                            #attendee["CORREO ELECTRÓNICO"] = cleaned_email
+                                            # Limpiar email
+                                            cleaned_email = clean_and_infer_email(original_email, company_name_for_email_infer)
+                                            attendee["CORREO ELECTRÓNICO"] = cleaned_email
+                                            
+                                            # ====== NUEVO: DETERMINAR TIPO ASISTENTE ======
+                                            tipo_asistente = ""
+                                            for campo in tipo_asistente_fields:
+                                                if attendee.get(campo, "").strip().lower() == "selected":
+                                                    tipo_asistente = campo
+                                                    break
+                                            
+                                            # Eliminar campos individuales de tipo
+                                            for campo in tipo_asistente_fields:
+                                                if campo in attendee:
+                                                    del attendee[campo]
+                                            
+                                            # Agregar nuevo campo consolidado
+                                            attendee["Tipo asistente"] = tipo_asistente
+                                            # ====== FIN DE MODIFICACIÓN ======
                                             
                                             combined_row = {
                                                 **event_data, 
                                                 **{k: v for k, v in attendee.items()}
                                             }
                                             all_consolidated_data.append(combined_row)
-                                        
-                                        #st.success(f"Datos de asistentes de '{file_name}' procesados y agregados.")
                                     else:
                                         st.info(f"No se extrajeron asistentes para un evento en '{file_name}'.")
                             else:
@@ -419,23 +416,32 @@ def main_streamlit_app():
                 
                 progress_bar.progress((i + 1) / total_files)
             
-            #st.header("2. Resultados Consolidados") # Reajustado el número del encabezado
             if all_consolidated_data:
                 df_final = pd.DataFrame(all_consolidated_data)
                 
-                # Ordenar columnas
+                # Ordenar columnas con la nueva estructura
                 ordered_columns = general_info_fields + ["Fuente_Archivo"] 
-                ordered_columns.extend(attendee_specific_fields_base) 
+                # Mantener solo campos base sin los de tipo
+                base_fields_without_type = [
+                    "NOMBRE COMPLETO",
+                    "NÚMERO DOCUMENTO",
+                    "NOMBRE EMPRESA/ENTIDAD",
+                    "Tipo asistente",  # Nueva columna consolidada
+                    "MUNICIPIO/ CORREGIMIENTO/ VEREDA",
+                    "NÚMERO CONTACTO",
+                    "CORREO ELECTRÓNICO"
+                ]
+                ordered_columns.extend(base_fields_without_type)
                 
+                # Añadir cualquier columna adicional
                 for col in df_final.columns:
-                    if col not in ordered_columns and col not in ["Tipo"]:
+                    if col not in ordered_columns and col not in tipo_asistente_fields:
                         ordered_columns.append(col)
                 
                 final_ordered_columns = [col for col in ordered_columns if col in df_final.columns]
                 df_final = df_final[final_ordered_columns]
 
                 st.success("¡Procesamiento completado!")
-                #st.dataframe(df_final)
 
                 # Opción de descarga de Excel
                 excel_buffer = BytesIO()
